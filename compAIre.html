@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>compAIre</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/marked@12.0.2/marked.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{height:100%;overflow:hidden}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:3px}
+@media(max-width:768px){
+  .hdr-keys{flex-direction:column!important;width:100%!important;gap:4px!important}
+  .hdr-keys input{width:100%!important}
+  .hdr-wrap{flex-direction:column!important;align-items:stretch!important}
+}
+.panel-scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.md{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.7;color:#f0f0ff}
+.md h1,.md h2,.md h3,.md h4{margin:14px 0 6px;font-weight:700;color:#f0f0ff;line-height:1.3}
+.md h1{font-size:20px;border-bottom:1px solid #2a2a3a;padding-bottom:6px}.md h2{font-size:17px}.md h3{font-size:15px}.md h4{font-size:14px}
+.md p{margin:6px 0 10px}.md ul,.md ol{margin:6px 0 10px;padding-left:22px}.md li{margin:3px 0}
+.md li>p{margin:2px 0}
+.md code{font-family:'SF Mono','Cascadia Code','Fira Code',monospace;font-size:12.5px;background:#13131d;padding:2px 6px;border-radius:4px;border:1px solid #2a2a3a;color:#d4a574}
+.md pre{margin:10px 0;border-radius:8px;overflow-x:auto;background:#13131d;border:1px solid #2a2a3a;padding:12px 14px}
+.md pre code{background:none;border:none;padding:0;font-size:12.5px;line-height:1.6;color:#e0e0f0}
+.md blockquote{border-left:3px solid #7a7aff;margin:10px 0;padding:6px 14px;color:#8888aa;background:#12121a;border-radius:0 6px 6px 0}
+.md table{border-collapse:collapse;margin:10px 0;width:100%}.md th,.md td{border:1px solid #2a2a3a;padding:8px 12px;font-size:13px;text-align:left}
+.md th{background:#1a1a26;font-weight:700}.md a{color:#7a7aff;text-decoration:none}.md a:hover{text-decoration:underline}
+.md hr{border:none;border-top:1px solid #2a2a3a;margin:14px 0}
+.md strong{color:#ffffff;font-weight:700}.md em{color:#d8d8f0}.md img{max-width:100%;border-radius:6px;margin:6px 0}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useRef,useCallback,useEffect,useMemo}=React;
+
+const C_M=[{id:"claude-sonnet-4-6",l:"Sonnet 4.6"},{id:"claude-opus-4-6",l:"Opus 4.6"},{id:"claude-sonnet-4-20250514",l:"Sonnet 4"},{id:"claude-haiku-4-5-20251001",l:"Haiku 4.5"}];
+const O_M=[{id:"gpt-5.4",l:"GPT-5.4"},{id:"gpt-5.4-mini",l:"GPT-5.4 Mini"},{id:"gpt-5.4-nano",l:"GPT-5.4 Nano"},{id:"gpt-5.2",l:"GPT-5.2"},{id:"gpt-4.1",l:"GPT-4.1"},{id:"gpt-4.1-mini",l:"GPT-4.1 Mini"},{id:"gpt-4o",l:"GPT-4o"},{id:"gpt-4o-mini",l:"GPT-4o Mini"}];
+const ADP=["claude-sonnet-4-6","claude-opus-4-6"],MXO=["claude-opus-4-6"],ISR=id=>id.startsWith("gpt-5");
+const BDG=20,WRN=15;
+const F="'SF Mono','Cascadia Code','Fira Code','JetBrains Mono','Consolas',monospace";
+const p={bg:"#0a0a0f",sf:"#12121a",sa:"#1a1a26",bd:"#2a2a3a",tx:"#f0f0ff",td:"#c8c8e0",tm:"#9090aa",cl:"#d4a574",clb:"#d4a57412",clx:"#d4a57430",oa:"#74d4a5",oab:"#74d4a512",oax:"#74d4a530",ac:"#7a7aff",er:"#ff6b6b",erb:"#ff6b6b12",erx:"#ff6b6b30",usr:"#22223a"};
+const IMG=["image/png","image/jpeg","image/gif","image/webp"],PDF="application/pdf";
+try{marked.use({breaks:true,gfm:true})}catch(e){try{marked.setOptions({breaks:true,gfm:true})}catch(e2){}}
+function safeParse(t){try{return(typeof marked.parse==="function")?marked.parse(t||""):t||""}catch{return t||""}}
+
+// ─── UTILS ───
+function mk(){const d=new Date();return d.getFullYear()+"-"+d.getMonth()}
+function getS(){try{return JSON.parse(localStorage.getItem("ai-s")||"{}")[mk()]||0}catch{return 0}}
+function addS(a){try{const d=JSON.parse(localStorage.getItem("ai-s")||"{}"),k=mk();d[k]=(d[k]||0)+a;localStorage.setItem("ai-s",JSON.stringify(d));return d[k]}catch{return a}}
+function cc(u,pv){if(!u)return 0;return pv==="claude"?((u.input_tokens||0)/1e6*3+(u.output_tokens||0)/1e6*15+(u.web_searches||0)*.01):(((u.input_tokens||u.prompt_tokens||0)/1e6)*2.5+((u.output_tokens||u.completion_tokens||0)/1e6)*15+(u.web_searches||0)*.01)}
+function getW(){try{return JSON.parse(localStorage.getItem("ai-w")||'{"claude":0,"openai":0}')}catch{return{claude:0,openai:0}}}
+function addW(pv){const w=getW();w[pv]++;localStorage.setItem("ai-w",JSON.stringify(w));return w}
+function getSW(){try{return JSON.parse(localStorage.getItem("ai-sw")||'{"claude":0,"openai":0}')}catch{return{claude:0,openai:0}}}
+function addSW(pv){const w=getSW();w[pv]++;localStorage.setItem("ai-sw",JSON.stringify(w));return w}
+function getPC(){try{return JSON.parse(localStorage.getItem("ai-pc")||"{}")[mk()]||{claude:0,openai:0}}catch{return{claude:0,openai:0}}}
+function addPC(pv,a){try{const d=JSON.parse(localStorage.getItem("ai-pc")||"{}"),k=mk();if(!d[k])d[k]={claude:0,openai:0};d[k][pv]=(d[k][pv]||0)+a;localStorage.setItem("ai-pc",JSON.stringify(d));return d[k]}catch{return{claude:0,openai:0}}}
+function readF(f){return new Promise((r,j)=>{const x=new FileReader();x.onload=()=>r(x.result.split(",")[1]);x.onerror=()=>j(new Error("Read fail"));x.readAsDataURL(f)})}
+
+// ─── CONVERSATION STORAGE ───
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function getConvos(){try{const d=JSON.parse(localStorage.getItem("ai-convos")||"[]");return Array.isArray(d)?d:[]}catch{try{localStorage.removeItem("ai-convos")}catch{};return[]}}
+function saveConvos(list){localStorage.setItem("ai-convos",JSON.stringify(list))}
+function stripFiles(msgs){return msgs.map(m=>{const o={role:m.role,content:m.content||""};if(m.cost!=null)o.cost=m.cost;if(m.elapsed)o.elapsed=m.elapsed;if(m.thinking)o.thinking=m.thinking;if(m.voted)o.voted=true;if(m.speedVoted)o.speedVoted=true;if(m.usage)o.usage=m.usage;if(m.files?.length)o.files=m.files.map(f=>({name:f.name,type:f.type}));return o})}
+function saveConvo(id,title,cChat,oChat,cApiMsgs,oResIds,cm,om){
+  try{
+    const list=getConvos().filter(c=>c.id!==id);
+    const cApiClean=cApiMsgs.map(m=>typeof m.content==="string"?{role:m.role,content:m.content}:{role:m.role,content:"[multimodal]"});
+    list.unshift({id,title,updated:Date.now(),cm,om,cChat:stripFiles(cChat),oChat:stripFiles(oChat),cApi:cApiClean,oIds:oResIds.filter(Boolean)});
+    if(list.length>50)list.length=50;
+    saveConvos(list);
+  }catch(e){console.error("saveConvo error:",e)}
+}
+function loadConvo(id){const list=getConvos();return list.find(c=>c.id===id)||null}
+function deleteConvo(id){saveConvos(getConvos().filter(c=>c.id!==id))}
+function convoTitle(msgs){const first=msgs.find(m=>m.role==="user");return first?(first.content||"").slice(0,40)+(first.content?.length>40?"…":""):"New chat"}
+function bCC(t,fs){if(!fs.length)return t;const ps=[];for(const f of fs){if(IMG.includes(f.type))ps.push({type:"image",source:{type:"base64",media_type:f.type,data:f.data}});else if(f.type===PDF)ps.push({type:"document",source:{type:"base64",media_type:"application/pdf",data:f.data}})}ps.push({type:"text",text:t});return ps}
+function bOC(t,fs){if(!fs.length)return t;const ps=[];for(const f of fs){if(IMG.includes(f.type))ps.push({type:"input_image",image_url:"data:"+f.type+";base64,"+f.data});else if(f.type===PDF)ps.push({type:"input_file",file_data:"data:application/pdf;base64,"+f.data,filename:f.name})}ps.push({type:"input_text",text:t});return ps}
+
+// ─── SSE PARSER ───
+function parseSSE(buf){
+  buf=buf.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  const evs=[];const parts=buf.split("\n\n");const rem=parts.pop();
+  for(const pt of parts){if(!pt.trim())continue;const lines=pt.split("\n");let ev="",dt="";
+    for(const l of lines){if(l.startsWith("event: "))ev=l.slice(7);else if(l.startsWith("data: "))dt+=l.slice(6);else if(l.startsWith("data:"))dt+=l.slice(5)}
+    if(dt){try{evs.push({e:ev,d:JSON.parse(dt)})}catch{}}
+  }return{evs,rem};
+}
+// Throttled updater — ensures React renders during streaming
+function makeThrottle(setter,uLast,ms=80){
+  let pending=null,timer=null;
+  return{
+    update(fn){pending=fn;if(!timer)timer=setTimeout(()=>{timer=null;if(pending)uLast(setter,pending);pending=null},ms)},
+    flush(){if(timer)clearTimeout(timer);if(pending)uLast(setter,pending);pending=null;timer=null}
+  };
+}
+
+// ─── STREAMING API ───
+async function streamClaude({model,messages,apiKey,system,cEffort,maxTokens,signal,onText,onThink,onDone}){
+  if(!apiKey)throw new Error("Anthropic API key required.");
+  const body={model,max_tokens:maxTokens,messages,stream:true,tools:[{type:"web_search_20250305",name:"web_search",max_uses:5}]};
+  if(system.trim())body.system=system.trim();
+  if(ADP.includes(model)){body.thinking={type:"adaptive"};if(cEffort!=="high")body.effort=cEffort}
+  else{body.thinking={type:"enabled",budget_tokens:10000};if(body.max_tokens<=10000)body.max_tokens=14096}
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify(body),signal});
+  if(!res.ok){const b=await res.text();let d=b;try{d=JSON.parse(b)?.error?.message||b}catch{}throw new Error("Claude "+res.status+": "+d)}
+  const reader=res.body.getReader();const dec=new TextDecoder();
+  let buf="",text="",think="",usage={},ws=0;
+  while(true){
+    const{done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const{evs,rem}=parseSSE(buf);buf=rem;
+    for(const{e,d}of evs){
+      if(d.type==="content_block_delta"){
+        if(d.delta?.type==="text_delta"){text+=d.delta.text;onText(text)}
+        if(d.delta?.type==="thinking_delta"){think+=d.delta.thinking;onThink(think)}
+      }
+      if(d.type==="content_block_start"&&d.content_block?.type==="server_tool_use")ws++;
+      if(d.type==="message_start")usage={...usage,input_tokens:d.message?.usage?.input_tokens};
+      if(d.type==="message_delta")usage={...usage,output_tokens:d.usage?.output_tokens};
+    }
+  }
+  usage.web_searches=ws;
+  onDone({text,thinking:think,usage});
+}
+
+async function streamOpenAI({model,content,apiKey,system,oEffort,oTemp,prevId,signal,onText,onDone}){
+  if(!apiKey)throw new Error("ChatGPT API key required.");
+  const body={model,input:[{role:"user",content}],tools:[{type:"web_search"}],stream:true};
+  if(system.trim())body.instructions=system.trim();
+  if(!ISR(model)&&oTemp!==1)body.temperature=oTemp;
+  if(oEffort!=="default")body.reasoning={effort:oEffort};
+  if(prevId)body.previous_response_id=prevId;
+  const res=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+apiKey},body:JSON.stringify(body),signal});
+  if(!res.ok){const b=await res.text();let d=b;try{d=JSON.parse(b)?.error?.message||b}catch{}throw new Error("OpenAI "+res.status+": "+d)}
+  const reader=res.body.getReader();const dec=new TextDecoder();
+  let buf="",text="",rid="",usage={},ws=0;
+  while(true){
+    const{done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const{evs,rem}=parseSSE(buf);buf=rem;
+    for(const{e,d}of evs){
+      if(d.type==="response.output_text.delta"){text+=d.delta;onText(text)}
+      if(d.type==="response.output_item.added"&&d.item?.type==="web_search_call")ws++;
+      if(d.type==="response.completed"){rid=d.response?.id;usage={...(d.response?.usage||{}),web_searches:ws}}
+    }
+  }
+  onDone({text,responseId:rid,usage});
+}
+
+// ─── COMPONENTS ───
+function Spinner(){return <span style={{display:"inline-block",width:14,height:14,border:"2px solid "+p.bd,borderTopColor:p.ac,borderRadius:"50%",animation:"spin .8s linear infinite"}}/>}
+function Md({text}){const html=useMemo(()=>safeParse(text),[text]);return <div className="md" dangerouslySetInnerHTML={{__html:html}}/>}
+
+function ChatMessage({msg,provider,isLast,onRetry,onVote,onSpeed,wins}){
+  const[showT,setShowT]=useState(false);
+  const isU=msg.role==="user";
+  const color=provider==="Claude"?p.cl:p.oa;
+  const thinkingVisible=showT||msg.showThinkingLive;
+  return(
+    <div style={{marginBottom:10,display:"flex",flexDirection:"column",alignItems:isU?"flex-end":"flex-start"}}>
+      <div style={{maxWidth:"95%",padding:isU?"8px 14px":"12px 16px",borderRadius:isU?"12px 12px 4px 12px":"4px 12px 12px 12px",background:isU?p.usr:p.sa,border:"1px solid "+(isU?"#3a3a50":p.bd),overflow:"hidden"}}>
+        {isU&&msg.files?.length>0&&(
+          <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>
+            {msg.files.map((f,i)=>IMG.includes(f.type)?<img key={i} src={"data:"+f.type+";base64,"+f.data} style={{maxWidth:100,maxHeight:60,borderRadius:3}} alt=""/>:<span key={i} style={{fontSize:9,background:p.bg,border:"1px solid "+p.bd,borderRadius:3,padding:"2px 6px",color:p.td}}>📄 {f.name}</span>)}
+          </div>
+        )}
+        {isU?<span style={{fontSize:13,color:p.td,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>{msg.content}</span>:(
+          <div>
+            {msg.thinking&&<div style={{marginBottom:4}}>
+              <button onClick={()=>setShowT(!showT)} style={{fontFamily:F,fontSize:9,background:"transparent",border:"1px solid "+p.bd,borderRadius:3,color:p.td,padding:"1px 6px",cursor:"pointer"}}>{thinkingVisible?"▾ thinking":"▸ thinking"}</button>
+              {thinkingVisible&&<div style={{marginTop:4,padding:6,background:p.bg,borderRadius:4,fontSize:10,color:p.tm,maxHeight:150,overflowY:"auto",fontFamily:"-apple-system,sans-serif",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{msg.thinking}</div>}
+            </div>}
+            {msg.streaming&&!msg.content&&<span style={{color:p.tm,animation:"pulse 1.2s infinite"}}>●●●</span>}
+            <Md text={msg.content}/>
+          </div>
+        )}
+      </div>
+      {!isU&&msg.cost!=null&&(
+        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2,padding:"0 4px",fontSize:9,color:p.tm}}>
+          <span>{msg.elapsed?((msg.elapsed/1000).toFixed(1)+"s"):""}{msg.cost>0?(" · $"+msg.cost.toFixed(4)):""}{msg.usage?.web_searches>0?(" · 🔍"+msg.usage.web_searches):""}</span>
+          {isLast&&!msg.streaming&&onRetry&&<button onClick={onRetry} title="Regenerate" style={{fontFamily:F,fontSize:9,background:"transparent",border:"1px solid "+p.bd,borderRadius:3,color:p.td,padding:"1px 6px",cursor:"pointer"}}>🔄</button>}
+          {!msg.streaming&&onSpeed&&<button onClick={onSpeed} title={provider+" was faster"} style={{fontFamily:F,fontSize:9,background:"transparent",border:"1px solid "+p.bd,borderRadius:3,color:msg.speedVoted?color:p.td,padding:"1px 6px",cursor:"pointer"}}>{msg.speedVoted?"⚡":"↯"}</button>}
+          {!msg.streaming&&onVote&&<button onClick={onVote} title={"Prefer "+provider} style={{fontFamily:F,fontSize:9,background:"transparent",border:"1px solid "+p.bd,borderRadius:3,color:msg.voted?color:p.td,padding:"1px 6px",cursor:"pointer"}}>{msg.voted?"★":"☆"}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatPanel({provider,color,colorBg,colorBorder,models,selectedModel,onModelChange,chat,loading,onStop,onRetry,onVote,onSpeed,wins,stacked}){
+  const endRef=useRef(null);
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[chat,loading]);
+  const lastAIdx=chat.reduce((acc,m,i)=>m.role==="assistant"?i:acc,-1);
+  return(
+    <div style={{flex:stacked?"0 0 50%":"1 1 0%",display:"flex",flexDirection:"column",minWidth:0,minHeight:0,overflow:"hidden",
+      borderRight:stacked?"none":(provider==="ChatGPT"?"none":"1px solid "+p.bd),
+      borderBottom:stacked?"1px solid "+p.bd:"none"}}>
+      <div style={{padding:"6px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:6,borderBottom:"1px solid "+p.bd,background:colorBg,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:10,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",padding:"2px 6px",borderRadius:4,color,background:color+"18",border:"1px solid "+colorBorder}}>{provider}</span>
+          <select style={{fontFamily:F,fontSize:10,background:p.sa,border:"1px solid "+p.bd,borderRadius:5,color:p.tx,padding:"3px 6px",outline:"none",cursor:"pointer"}} value={selectedModel} onChange={e=>onModelChange(e.target.value)}>
+            {models.map(m=><option key={m.id} value={m.id}>{m.l}</option>)}
+          </select>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          {loading&&<button onClick={onStop} style={{fontFamily:F,fontSize:9,fontWeight:700,background:p.er+"22",border:"1px solid "+p.er+"66",borderRadius:4,color:p.er,padding:"2px 8px",cursor:"pointer",letterSpacing:".03em"}}>■ STOP</button>}
+          {loading&&<Spinner/>}
+        </div>
+      </div>
+      <div className="panel-scroll" style={{flex:"1 1 0%",padding:10,minHeight:0}}>
+        {chat.length===0&&<div style={{color:p.tm,fontStyle:"italic",fontSize:12,padding:4}}>Start a conversation…</div>}
+        {chat.map((m,i)=><ChatMessage key={i} msg={m} provider={provider} isLast={i===lastAIdx} onRetry={i===lastAIdx?onRetry:null} onVote={m.role==="assistant"&&!m.streaming?(()=>onVote(i)):null} onSpeed={m.role==="assistant"&&!m.streaming?(()=>onSpeed(i)):null} wins={wins}/>)}
+        <div ref={endRef}/>
+      </div>
+    </div>
+  );
+}
+
+// ─── SETTINGS ───
+const lb={fontSize:10,color:p.tm,fontWeight:600,letterSpacing:".04em",minWidth:68,flexShrink:0};
+const ip={fontFamily:F,fontSize:11,background:p.sa,border:"1px solid "+p.bd,borderRadius:5,color:p.tx,padding:"4px 8px",outline:"none"};
+const rw={display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"};
+function Settings({system,setSystem,cm,cE,setCE,cX,setCX,om,oE,setOE,oT,setOT}){
+  const[open,setOpen]=useState(false);
+  const[showHelp,setShowHelp]=useState(false);
+  return(
+    <div style={{borderBottom:"1px solid "+p.bd,background:p.sf}}>
+      <button onClick={()=>setOpen(!open)} style={{fontFamily:F,fontSize:11,background:"transparent",border:"none",color:p.td,padding:"6px 24px",cursor:"pointer",width:"100%",textAlign:"left"}}>{open?"▾ Settings":"▸ Settings"}</button>
+      {open&&<div style={{padding:"0 24px 12px",display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button onClick={()=>setShowHelp(true)} style={{fontFamily:F,fontSize:10,background:p.ac+"22",border:"1px solid "+p.ac+"66",borderRadius:5,color:p.ac,padding:"4px 12px",cursor:"pointer",fontWeight:600}}>Instructions</button>
+        </div>
+        {showHelp&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowHelp(false)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:p.sf,border:"1px solid "+p.bd,borderRadius:12,padding:"24px 28px",maxWidth:600,maxHeight:"80vh",overflowY:"auto",fontFamily:"-apple-system,sans-serif",fontSize:14,lineHeight:1.7,color:p.tx}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <span style={{fontSize:20,fontWeight:700,fontFamily:F}}>
+                  <span style={{color:"#e8e8f8"}}>comp</span>
+                  <span style={{color:"#00f0ff",textShadow:"0 0 8px #00f0ff, 0 0 20px #00f0ff44",fontWeight:900}}>AI</span>
+                  <span style={{color:"#e8e8f8"}}>re</span>
+                </span>
+                <button onClick={()=>setShowHelp(false)} style={{fontFamily:F,fontSize:14,background:"transparent",border:"none",color:p.td,cursor:"pointer",padding:"4px 8px"}}>✕</button>
+              </div>
+              <p style={{marginBottom:12}}>This tool lets you compare Claude and ChatGPT side by side. Send the same prompt to both models simultaneously and compare their responses in real time — quality, speed, cost, and reasoning depth.</p>
+              <p style={{marginBottom:12}}><strong>Getting started:</strong> Enter your Anthropic API key (from <span style={{color:p.ac}}>console.anthropic.com</span>) in the ANT Key field and your OpenAI API key (from <span style={{color:p.ac}}>platform.openai.com</span>) in the OAI Key field. Both keys stay in your browser and are never stored or transmitted anywhere except directly to their respective APIs.</p>
+              <p style={{marginBottom:12}}><strong>Sending prompts:</strong> Type your prompt and press ⌘/Ctrl+Enter or click Send. Use the <span style={{color:p.cl}}>✦</span><span style={{color:p.oa}}>●</span> toggle buttons to send to both models, Claude only, or ChatGPT only. Attach images or PDFs with the 📎 button or drag and drop files anywhere on the page.</p>
+              <p style={{marginBottom:12}}><strong>Comparing responses:</strong> Rate responses with ☆ (quality) and ↯ (speed) buttons below each response. Your votes are tracked in the footer scoreboard and persist across sessions. Use 🔄 to regenerate the last response, and ■ STOP to halt a response mid-stream.</p>
+              <p style={{marginBottom:12}}><strong>Layout modes:</strong> Use the ◫ ☰ ◻ buttons to switch between side-by-side, vertical stack, and tab views. On mobile, tab mode is selected automatically.</p>
+              <p style={{marginBottom:12}}><strong>Cost tracking:</strong> Every response shows its individual cost. The footer displays your running monthly total against a $20 budget cap that resets on the 1st of each month. Per-provider spend is shown so you can see which model costs you more.</p>
+              <p style={{marginBottom:0}}><strong>Data portability:</strong> Use Export all / Import all in Settings to move your tracking data and conversation history between computers. Use the EXPORT button in the header to save the current conversation as a markdown file.</p>
+            </div>
+          </div>
+        )}
+        <div style={rw}><span style={lb}>SYSTEM</span><textarea style={{...ip,flex:1,minHeight:32,maxHeight:80,resize:"vertical",lineHeight:1.4}} value={system} onChange={e=>setSystem(e.target.value)} rows={1}/></div>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:220,padding:10,background:p.clb,border:"1px solid "+p.clx,borderRadius:8}}>
+            <div style={{fontSize:9,fontWeight:700,color:p.cl,marginBottom:6}}>CLAUDE</div>
+            <div style={{...rw,marginBottom:4}}><span style={lb}>EFFORT</span><select style={{...ip,cursor:"pointer"}} value={cE} onChange={e=>setCE(e.target.value)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>{MXO.includes(cm)&&<option value="max">Max</option>}</select></div>
+            <div style={rw}><span style={lb}>MAX OUT</span><input type="number" min="1024" max="128000" step="1024" value={cX} onChange={e=>setCX(Math.max(1024,parseInt(e.target.value)||64000))} style={{...ip,width:68}}/></div>
+          </div>
+          <div style={{flex:1,minWidth:220,padding:10,background:p.oab,border:"1px solid "+p.oax,borderRadius:8}}>
+            <div style={{fontSize:9,fontWeight:700,color:p.oa,marginBottom:6}}>OPENAI</div>
+            <div style={{...rw,marginBottom:4}}><span style={lb}>REASONING</span><select style={{...ip,cursor:"pointer"}} value={oE} onChange={e=>setOE(e.target.value)}><option value="default">Default</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+            <div style={rw}><span style={lb}>TEMP</span><input type="range" min="0" max="2" step=".05" value={ISR(om)?1:oT} disabled={ISR(om)} onChange={e=>setOT(parseFloat(e.target.value))} style={{flex:1,accentColor:p.oa,opacity:ISR(om)?.4:1}}/><span style={{fontSize:10,color:p.tx,width:28,textAlign:"right"}}>{ISR(om)?"n/a":oT.toFixed(2)}</span></div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center",paddingTop:8,borderTop:"1px solid "+p.bd,flexWrap:"wrap"}}>
+          <span style={{fontSize:9,color:p.tm,fontWeight:600}}>DATA</span>
+          <button onClick={()=>{
+            const data={};["ai-s","ai-w","ai-sw","ai-pc","ai-convos"].forEach(k=>{const v=localStorage.getItem(k);if(v)data[k]=JSON.parse(v)});
+            const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+            const url=URL.createObjectURL(blob);const a=document.createElement("a");
+            a.href=url;a.download="compAIre-data_"+new Date().toISOString().slice(0,19).replace(/:/g,"-")+".json";a.click();URL.revokeObjectURL(url);
+          }} style={{fontFamily:F,fontSize:9,background:p.sa,border:"1px solid "+p.bd,borderRadius:4,color:p.td,padding:"3px 10px",cursor:"pointer"}}>Export all ↓</button>
+          <button onClick={()=>{
+            const inp=document.createElement("input");inp.type="file";inp.accept=".json";
+            inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+              r.onload=ev=>{try{const data=JSON.parse(ev.target.result);
+                Object.entries(data).forEach(([k,v])=>localStorage.setItem(k,JSON.stringify(v)));
+                window.location.reload();
+              }catch(err){alert("Invalid data file")}};r.readAsText(f)};inp.click();
+          }} style={{fontFamily:F,fontSize:9,background:p.sa,border:"1px solid "+p.bd,borderRadius:4,color:p.td,padding:"3px 10px",cursor:"pointer"}}>Import all ↑</button>
+          <button onClick={()=>{if(confirm("Reset all spend tracking and win/loss stats?")){["ai-s","ai-w","ai-sw","ai-pc"].forEach(k=>localStorage.removeItem(k));window.location.reload()}}} style={{fontFamily:F,fontSize:9,background:"transparent",border:"1px solid "+p.erx,borderRadius:4,color:p.er,padding:"3px 10px",cursor:"pointer"}}>Reset all</button>
+          <span style={{fontSize:9,color:p.tm,fontStyle:"italic"}}>spend, wins, speed, conversations — stored in browser</span>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+// ─── APP ───
+function App(){
+  const[cm,setCm]=useState("claude-sonnet-4-6");const[om,setOm]=useState("gpt-5.4");
+  const[aK,setAK]=useState(()=>{try{return localStorage.getItem("ai-ak")||""}catch(e){return""}});const[oK,setOK]=useState(()=>{try{return localStorage.getItem("ai-ok")||""}catch(e){return""}});
+  const[prompt,setPr]=useState("");const[files,setFi]=useState([]);const[sendTo,setST]=useState("both");
+  const[sys,setSys]=useState("Be talkative and conversational. Have a personality instead of being dry and formal. Be funny when appropriate. Take a forward-thinking view. Readily share strong opinions. Be practical above all. Talk like an intelligent member of Gen Z.");
+  const[cE,setCE]=useState("high");const[cX,setCX]=useState(64000);
+  const[oE,setOE]=useState("high");const[oT,setOT]=useState(1);
+  const[cC,setCC]=useState([]);const[oC,setOC]=useState([]);
+  const[cL,setCL]=useState(false);const[oL,setOL]=useState(false);
+  const[sp,setSp]=useState(getS());const[wins,setWins]=useState(getW());const[speedW,setSpeedW]=useState(getSW());const[pcost,setPcost]=useState(getPC());
+  const cApi=useRef([]);const oIds=useRef([]);const abR=useRef({});const fR=useRef(null);
+  const over=sp>=BDG,near=sp>=WRN,running=cL||oL;
+  useEffect(()=>{try{localStorage.setItem("ai-ak",aK)}catch(e){}},[aK]);
+  useEffect(()=>{try{localStorage.setItem("ai-ok",oK)}catch(e){}},[oK]);
+
+  // Conversation management
+  const[convoId,setConvoId]=useState(()=>genId());
+  const[convoList,setConvoList]=useState(()=>{try{return getConvos()}catch{return[]}});
+  const[sidebar,setSidebar]=useState(false);
+
+  // Auto-save conversation after chat changes
+  useEffect(()=>{
+    try{
+      if(cC.length>0||oC.length>0){
+        const title=convoTitle(cC.length>0?cC:oC);
+        saveConvo(convoId,title,cC,oC,cApi.current,oIds.current,cm,om);
+        setConvoList(getConvos());
+      }
+    }catch(e){console.error("Auto-save failed:",e)}
+  },[cC.length,oC.length,convoId]);
+
+  const loadConversation=useCallback((id)=>{
+    try{
+      const c=loadConvo(id);if(!c)return;
+      setConvoId(c.id);
+      setCC(c.cChat||[]);setOC(c.oChat||[]);
+      cApi.current=c.cApi||[];oIds.current=c.oIds||[];
+      if(c.cm)setCm(c.cm);if(c.om)setOm(c.om);
+      setSidebar(false);
+    }catch(e){console.error("Load failed:",e)}
+  },[]);
+
+  const deleteConversation=useCallback((id,e)=>{
+    e.stopPropagation();
+    try{
+      deleteConvo(id);setConvoList(getConvos());
+      if(id===convoId){setConvoId(genId());setCC([]);setOC([]);cApi.current=[];oIds.current=[];}
+    }catch(er){console.error("Delete failed:",er)}
+  },[convoId]);
+
+  // Layout: "side" (desktop default), "tabs" (mobile default), "stack" (vertical)
+  const[layout,setLayout]=useState(()=>window.innerWidth<768?"tabs":"side");
+  const[activeTab,setActiveTab]=useState("claude");
+  useEffect(()=>{
+    const onResize=()=>{if(window.innerWidth<768&&layout==="side")setLayout("tabs");};
+    window.addEventListener("resize",onResize);return()=>window.removeEventListener("resize",onResize);
+  },[layout]);
+
+  const hF=useCallback(async fl=>{const nf=[];for(const f of fl){if(!IMG.includes(f.type)&&f.type!==PDF)continue;if(f.size>20e6)continue;nf.push({name:f.name,type:f.type,data:await readF(f)})}setFi(pr=>[...pr,...nf])},[]);
+  const rmF=useCallback(i=>{setFi(pr=>pr.filter((_,j)=>j!==i))},[]);
+
+  // Update last message helper
+  const uLast=(setter,fn)=>setter(pr=>{const u=[...pr];if(u.length)u[u.length-1]=fn(u[u.length-1]);return u});
+
+  const send=useCallback(()=>{
+    if(!prompt.trim()||running||over)return;
+    const q=prompt.trim(),af=[...files];setPr("");setFi([]);
+    const um={role:"user",content:q,files:af};
+    const toC=sendTo==="both"||sendTo==="claude",toO=sendTo==="both"||sendTo==="openai";
+    if(toC)setCC(pr=>[...pr,um]);if(toO)setOC(pr=>[...pr,um]);
+    abR.current.c?.abort();abR.current.o?.abort();
+    const cAC=new AbortController(),oAC=new AbortController();abR.current={c:cAC,o:oAC};
+
+    if(toC){
+      cApi.current.push({role:"user",content:bCC(q,af)});
+      setCC(pr=>[...pr,{role:"assistant",content:"",streaming:true,showThinkingLive:true}]);
+      setCL(true);const t1=performance.now();
+      const cThrottle=makeThrottle(setCC,uLast);
+      streamClaude({model:cm,messages:[...cApi.current],apiKey:aK,signal:cAC.signal,system:sys,cEffort:cE,maxTokens:cX,
+        onText:t=>cThrottle.update(m=>({...m,content:t})),
+        onThink:t=>cThrottle.update(m=>({...m,thinking:t})),
+        onDone:r=>{cThrottle.flush();const cost=cc(r.usage,"claude");setSp(addS(cost));setPcost(addPC("claude",cost));cApi.current.push({role:"assistant",content:r.text});uLast(setCC,m=>({...m,content:r.text,thinking:r.thinking,streaming:false,showThinkingLive:false,usage:r.usage,cost,elapsed:performance.now()-t1}));setCL(false)}
+      }).catch(e=>{if(e.name==="AbortError")return;cThrottle.flush();cApi.current.pop();uLast(setCC,m=>({...m,content:"⚠️ "+e.message,streaming:false,showThinkingLive:false,cost:0,elapsed:performance.now()-t1}));setCL(false)});
+    }
+    if(toO){
+      const oc=bOC(q,af);const prevId=oIds.current[oIds.current.length-1]||null;
+      setOC(pr=>[...pr,{role:"assistant",content:"",streaming:true}]);
+      setOL(true);const t2=performance.now();
+      const oThrottle=makeThrottle(setOC,uLast);
+      streamOpenAI({model:om,content:oc,apiKey:oK,signal:oAC.signal,system:sys,oEffort:oE,oTemp:oT,prevId,
+        onText:t=>oThrottle.update(m=>({...m,content:t})),
+        onDone:r=>{oThrottle.flush();const cost=cc(r.usage,"openai");setSp(addS(cost));setPcost(addPC("openai",cost));oIds.current.push(r.responseId);uLast(setOC,m=>({...m,content:r.text,streaming:false,usage:r.usage,cost,elapsed:performance.now()-t2}));setOL(false)}
+      }).catch(e=>{if(e.name==="AbortError")return;oThrottle.flush();uLast(setOC,m=>({...m,content:"⚠️ "+e.message,streaming:false,cost:0,elapsed:performance.now()-t2}));setOL(false)});
+    }
+  },[prompt,files,sendTo,running,over,cm,om,aK,oK,sys,cE,cX,oE,oT]);
+
+  // Regenerate
+  const regenC=useCallback(()=>{
+    if(cL||cC.length<2)return;
+    cApi.current.pop(); // remove last assistant
+    setCC(pr=>pr.slice(0,-1)); // remove from chat
+    const lastUser=cApi.current[cApi.current.length-1];
+    if(!lastUser)return;
+    setCC(pr=>[...pr,{role:"assistant",content:"",streaming:true,showThinkingLive:true}]);
+    setCL(true);const t1=performance.now();const cAC=new AbortController();abR.current.c=cAC;
+    const cT=makeThrottle(setCC,uLast);
+    streamClaude({model:cm,messages:[...cApi.current],apiKey:aK,signal:cAC.signal,system:sys,cEffort:cE,maxTokens:cX,
+      onText:t=>cT.update(m=>({...m,content:t})),onThink:t=>cT.update(m=>({...m,thinking:t})),
+      onDone:r=>{cT.flush();const cost=cc(r.usage,"claude");setSp(addS(cost));setPcost(addPC("claude",cost));cApi.current.push({role:"assistant",content:r.text});uLast(setCC,m=>({...m,content:r.text,thinking:r.thinking,streaming:false,showThinkingLive:false,usage:r.usage,cost,elapsed:performance.now()-t1}));setCL(false)}
+    }).catch(e=>{if(e.name==="AbortError")return;cT.flush();uLast(setCC,m=>({...m,content:"⚠️ "+e.message,streaming:false,showThinkingLive:false,cost:0}));setCL(false)});
+  },[cL,cC,cm,aK,sys,cE,cX]);
+
+  const regenO=useCallback(()=>{
+    if(oL||oC.length<2)return;
+    oIds.current.pop();
+    setOC(pr=>pr.slice(0,-1));
+    const lastUserMsg=oC.filter(m=>m.role==="user").pop();
+    if(!lastUserMsg)return;
+    const oc=bOC(lastUserMsg.content,lastUserMsg.files||[]);
+    const prevId=oIds.current[oIds.current.length-1]||null;
+    setOC(pr=>[...pr,{role:"assistant",content:"",streaming:true}]);
+    setOL(true);const t2=performance.now();const oAC=new AbortController();abR.current.o=oAC;
+    const oT2=makeThrottle(setOC,uLast);
+    streamOpenAI({model:om,content:oc,apiKey:oK,signal:oAC.signal,system:sys,oEffort:oE,oTemp:oT,prevId,
+      onText:t=>oT2.update(m=>({...m,content:t})),
+      onDone:r=>{oT2.flush();const cost=cc(r.usage,"openai");setSp(addS(cost));setPcost(addPC("openai",cost));oIds.current.push(r.responseId);uLast(setOC,m=>({...m,content:r.text,streaming:false,usage:r.usage,cost,elapsed:performance.now()-t2}));setOL(false)}
+    }).catch(e=>{if(e.name==="AbortError")return;oT2.flush();uLast(setOC,m=>({...m,content:"⚠️ "+e.message,streaming:false,cost:0}));setOL(false)});
+  },[oL,oC,om,oK,sys,oE,oT]);
+
+  // Vote
+  const voteC=useCallback(i=>{setCC(pr=>{const u=[...pr];u[i]={...u[i],voted:true};return u});setWins(addW("claude"))},[]);
+  const voteO=useCallback(i=>{setOC(pr=>{const u=[...pr];u[i]={...u[i],voted:true};return u});setWins(addW("openai"))},[]);
+  // Speed vote
+  const speedC=useCallback(i=>{setCC(pr=>{const u=[...pr];u[i]={...u[i],speedVoted:true};return u});setSpeedW(addSW("claude"))},[]);
+  const speedO=useCallback(i=>{setOC(pr=>{const u=[...pr];u[i]={...u[i],speedVoted:true};return u});setSpeedW(addSW("openai"))},[]);
+
+  // Stop
+  const stopC=useCallback(()=>{
+    abR.current.c?.abort();
+    uLast(setCC,m=>{
+      if(m.streaming){
+        if(m.content)cApi.current.push({role:"assistant",content:m.content});
+        return{...m,streaming:false,content:m.content+(m.content?"\n\n":"")+"⏹ Stopped by user"};
+      }return m;
+    });
+    setCL(false);
+  },[]);
+  const stopO=useCallback(()=>{
+    abR.current.o?.abort();
+    uLast(setOC,m=>m.streaming?{...m,streaming:false,content:m.content+(m.content?"\n\n":"")+"⏹ Stopped by user"}:m);
+    setOL(false);
+  },[]);
+
+  const newConvo=useCallback(()=>{setConvoId(genId());setCC([]);setOC([]);cApi.current=[];oIds.current=[];setFi([]);setSidebar(false)},[]);
+  const onKey=useCallback(e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))send()},[send]);
+  const[drag,setDrag]=useState(false);
+
+  const exportChat=useCallback(()=>{
+    const ts=new Date().toISOString().slice(0,16).replace("T","_");
+    let md="# compAIre export — "+ts+"\n\n";
+    md+="**Claude model:** "+cm+" | **ChatGPT model:** "+om+"\n";
+    md+="**Total spend:** $"+sp.toFixed(2)+" (Claude: $"+pcost.claude.toFixed(2)+" · ChatGPT: $"+pcost.openai.toFixed(2)+")\n";
+    md+="**Quality wins:** Claude "+wins.claude+" · ChatGPT "+wins.openai+" | **Speed wins:** Claude "+speedW.claude+" · ChatGPT "+speedW.openai+"\n\n---\n\n";
+    const maxLen=Math.max(cC.length,oC.length);
+    for(let i=0;i<maxLen;i++){
+      const c=cC[i],o=oC[i];
+      if(c&&c.role==="user")md+="## 👤 User\n\n"+c.content+"\n\n";
+      else if(o&&o.role==="user")md+="## 👤 User\n\n"+o.content+"\n\n";
+      if(c&&c.role==="assistant"){md+="### Claude"+(c.cost?" ($"+c.cost.toFixed(4)+")":"")+(c.elapsed?" — "+(c.elapsed/1000).toFixed(1)+"s":"")+"\n\n"+c.content+"\n\n";}
+      if(o&&o.role==="assistant"){md+="### ChatGPT"+(o.cost?" ($"+o.cost.toFixed(4)+")":"")+(o.elapsed?" — "+(o.elapsed/1000).toFixed(1)+"s":"")+"\n\n"+o.content+"\n\n";}
+      if(i<maxLen-1)md+="---\n\n";
+    }
+    const blob=new Blob([md],{type:"text/markdown"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="compAIre_"+ts+".md";a.click();
+    URL.revokeObjectURL(url);
+  },[cC,oC,cm,om,sp,pcost,wins,speedW]);
+
+  const kI={fontFamily:F,fontSize:11,background:p.sa,border:"1px solid "+p.bd,borderRadius:6,color:p.tx,padding:"5px 10px",width:190,outline:"none"};
+  const sC=over?p.er:near?"#ffaa44":p.oa;
+
+  return(
+    <div style={{fontFamily:F,fontSize:13,color:p.tx,background:p.bg,height:"100dvh",maxHeight:"100vh",display:"flex",flexDirection:"column",overflow:"hidden"}} onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);if(e.dataTransfer.files.length)hF(e.dataTransfer.files)}}>
+      {drag&&<div style={{position:"fixed",inset:0,background:"rgba(122,122,255,.1)",border:"3px dashed "+p.ac,zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:p.ac,pointerEvents:"none"}}>Drop files here</div>}
+
+      {/* Conversation sidebar */}
+      {sidebar&&<div style={{position:"fixed",inset:0,zIndex:900,display:"flex"}} onClick={()=>setSidebar(false)}>
+        <div onClick={e=>e.stopPropagation()} style={{width:280,maxWidth:"80vw",height:"100%",background:p.sf,borderRight:"1px solid "+p.bd,display:"flex",flexDirection:"column",boxShadow:"4px 0 20px rgba(0,0,0,.5)"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid "+p.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:12,fontWeight:700,color:p.tx,fontFamily:F}}>Conversations</span>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={newConvo} style={{fontFamily:F,fontSize:9,background:p.ac+"22",border:"1px solid "+p.ac+"66",borderRadius:4,color:p.ac,padding:"4px 10px",cursor:"pointer",fontWeight:600}}>+ NEW</button>
+              <button onClick={()=>setSidebar(false)} style={{fontFamily:F,fontSize:12,background:"transparent",border:"none",color:p.td,cursor:"pointer"}}>✕</button>
+            </div>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:8,WebkitOverflowScrolling:"touch"}}>
+            {convoList.length===0&&<div style={{color:p.tm,fontSize:11,fontStyle:"italic",padding:8}}>No conversations yet</div>}
+            {convoList.map(c=>(
+              <div key={c.id} onClick={()=>loadConversation(c.id)} style={{padding:"10px 12px",borderRadius:6,marginBottom:4,cursor:"pointer",
+                background:c.id===convoId?p.ac+"18":p.sa,border:"1px solid "+(c.id===convoId?p.ac+"44":p.bd),
+                display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,transition:"background .15s"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:c.id===convoId?p.tx:p.td,fontWeight:c.id===convoId?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"-apple-system,sans-serif"}}>{c.title||"New chat"}</div>
+                  <div style={{fontSize:9,color:p.tm,marginTop:3,display:"flex",gap:6,alignItems:"center"}}>
+                    <span>{new Date(c.updated).toLocaleDateString()}</span>
+                    <span>{new Date(c.updated).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span>
+                    <span style={{display:"flex",gap:3}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:p.cl,display:"inline-block"}}/>
+                      <span style={{width:8,height:8,borderRadius:"50%",background:p.oa,display:"inline-block"}}/>
+                    </span>
+                  </div>
+                </div>
+                <button onClick={e=>deleteConversation(c.id,e)} title="Delete" style={{fontFamily:F,fontSize:10,background:"transparent",border:"none",color:p.tm,cursor:"pointer",padding:"2px 4px",flexShrink:0,lineHeight:1}}>🗑</button>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{flex:1}}/>
+      </div>}
+
+      <div className="hdr-wrap" style={{padding:"8px 16px",borderBottom:"1px solid "+p.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",background:p.sf,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <button onClick={()=>setSidebar(!sidebar)} title="Conversation history" style={{fontFamily:F,fontSize:14,background:"transparent",border:"1px solid "+p.bd,borderRadius:4,color:p.td,padding:"4px 8px",cursor:"pointer",minHeight:28,lineHeight:1}}>☰</button>
+          <span style={{fontSize:16,fontWeight:700,letterSpacing:".02em",userSelect:"none"}}>
+            <span style={{color:"#e8e8f8"}}>comp</span>
+            <span style={{color:"#00f0ff",textShadow:"0 0 8px #00f0ff, 0 0 20px #00f0ff44",fontWeight:900,letterSpacing:".04em"}}>AI</span>
+            <span style={{color:"#e8e8f8"}}>re</span>
+          </span>
+          <button onClick={newConvo} style={{fontFamily:F,fontSize:9,background:p.sa,border:"1px solid "+p.bd,borderRadius:4,color:p.td,padding:"4px 10px",cursor:"pointer",minHeight:28}}>NEW</button>
+          <button onClick={exportChat} title="Save conversation as readable markdown. For data portability (import/export), use Settings → Export all." style={{fontFamily:F,fontSize:9,background:p.sa,border:"1px solid "+p.bd,borderRadius:4,color:p.td,padding:"4px 10px",cursor:"pointer",minHeight:28}}>TRANSCRIPT ↓</button>
+          <div style={{display:"flex",gap:2}}>
+            {[
+              {v:"both",icon:<span style={{fontSize:9,fontWeight:700,fontFamily:F,color:p.ac,letterSpacing:".04em"}}>BOTH</span>},
+              {v:"claude",icon:<span style={{width:20,height:20,borderRadius:"50%",background:p.cl,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",fontFamily:F,lineHeight:1}}>C</span>},
+              {v:"openai",icon:<span style={{width:20,height:20,borderRadius:"50%",background:p.oa,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",fontFamily:F,lineHeight:1}}>G</span>}
+            ].map(({v,icon})=><button key={v} onClick={()=>setST(v)} title={v==="both"?"Send to both":v==="claude"?"Claude only":"ChatGPT only"} style={{background:sendTo===v?(v==="claude"?p.clx:v==="openai"?p.oax:p.ac+"33"):"transparent",border:"1px solid "+(sendTo===v?(v==="claude"?p.cl:v==="openai"?p.oa:p.ac):p.bd),borderRadius:4,padding:"3px 6px",cursor:"pointer",minHeight:28,display:"flex",alignItems:"center",justifyContent:"center",opacity:sendTo===v?1:.4}}>{icon}</button>)}
+          </div>
+        </div>
+        <div className="hdr-keys" style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:4,alignItems:"center",flex:1,minWidth:160}}>
+            <span style={{fontSize:9,color:p.tm,fontWeight:600,flexShrink:0}}>ANT Key</span>
+            <input style={{...kI,flex:1,minWidth:0}} type="password" placeholder="sk-ant-..." value={aK} onChange={e=>setAK(e.target.value)} spellCheck={false}/>
+          </div>
+          <div style={{display:"flex",gap:4,alignItems:"center",flex:1,minWidth:160}}>
+            <span style={{fontSize:9,color:p.tm,fontWeight:600,flexShrink:0}}>OAI Key</span>
+            <input style={{...kI,flex:1,minWidth:0}} type="password" placeholder="sk-..." value={oK} onChange={e=>setOK(e.target.value)} spellCheck={false}/>
+          </div>
+        </div>
+      </div>
+
+      <Settings system={sys} setSystem={setSys} cm={cm} cE={cE} setCE={setCE} cX={cX} setCX={setCX} om={om} oE={oE} setOE={setOE} oT={oT} setOT={setOT}/>
+
+      {/* Layout controls + tab bar */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 12px",borderBottom:"1px solid "+p.bd,background:p.sf,flexShrink:0,gap:6,flexWrap:"wrap"}}>
+        {layout==="tabs"&&(
+          <div style={{display:"flex",gap:0}}>
+            <button onClick={()=>setActiveTab("claude")} style={{fontFamily:F,fontSize:10,fontWeight:activeTab==="claude"?700:400,background:activeTab==="claude"?p.clb:"transparent",border:"1px solid "+(activeTab==="claude"?p.cl:p.bd),borderRight:"none",borderRadius:"5px 0 0 5px",color:activeTab==="claude"?p.cl:p.tm,padding:"4px 14px",cursor:"pointer"}}>Claude</button>
+            <button onClick={()=>setActiveTab("openai")} style={{fontFamily:F,fontSize:10,fontWeight:activeTab==="openai"?700:400,background:activeTab==="openai"?p.oab:"transparent",border:"1px solid "+(activeTab==="openai"?p.oa:p.bd),borderRadius:"0 5px 5px 0",color:activeTab==="openai"?p.oa:p.tm,padding:"4px 14px",cursor:"pointer"}}>ChatGPT</button>
+          </div>
+        )}
+        {layout!=="tabs"&&<div/>}
+        <div style={{display:"flex",gap:2}}>
+          {[{v:"side",l:"Side",icon:"◫"},{v:"stack",l:"Stack",icon:"☰"},{v:"tabs",l:"Tabs",icon:"◻"}].map(({v,l,icon})=>(
+            <button key={v} onClick={()=>setLayout(v)} title={l} style={{fontFamily:F,fontSize:10,background:layout===v?p.ac+"33":"transparent",border:"1px solid "+(layout===v?p.ac:p.bd),borderRadius:4,color:layout===v?p.ac:p.tm,padding:"3px 8px",cursor:"pointer"}}>{icon}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Panels */}
+      <div style={{display:"flex",flexDirection:layout==="stack"?"column":"row",flex:"1 1 0%",minHeight:0,overflow:"hidden",position:"relative"}}>
+        {(layout!=="tabs"||activeTab==="claude")&&(
+          <ChatPanel provider="Claude" color={p.cl} colorBg={p.clb} colorBorder={p.clx} models={C_M} selectedModel={cm} onModelChange={setCm} chat={cC} loading={cL} onStop={stopC} onRetry={regenC} onVote={voteC} onSpeed={speedC} wins={wins} stacked={layout==="stack"}/>
+        )}
+        {(layout!=="tabs"||activeTab==="openai")&&(
+          <ChatPanel provider="ChatGPT" color={p.oa} colorBg={p.oab} colorBorder={p.oax} models={O_M} selectedModel={om} onModelChange={setOm} chat={oC} loading={oL} onStop={stopO} onRetry={regenO} onVote={voteO} onSpeed={speedO} wins={wins} stacked={layout==="stack"}/>
+        )}
+      </div>
+
+      <div style={{borderTop:"1px solid "+p.bd,background:p.sf,flexShrink:0}}>
+        {over&&<div style={{padding:"5px 20px",background:p.erb,fontSize:11,color:p.er,textAlign:"center"}}>Monthly budget of ${BDG} reached.</div>}
+        {files.length>0&&<div style={{padding:"6px 20px 0",display:"flex",gap:4,flexWrap:"wrap"}}>
+          {files.map((f,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:3,background:p.sa,border:"1px solid "+p.bd,borderRadius:5,padding:"3px 6px",fontSize:9,color:p.td}}>
+            {IMG.includes(f.type)?<img src={"data:"+f.type+";base64,"+f.data} style={{width:20,height:20,borderRadius:2,objectFit:"cover"}} alt=""/>:<span>📄</span>}
+            <span style={{maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
+            <button onClick={()=>rmF(i)} style={{fontFamily:F,fontSize:9,background:"transparent",border:"none",color:p.er,cursor:"pointer"}}>×</button>
+          </div>)}
+        </div>}
+        <div style={{padding:"8px 12px",display:"flex",gap:6,alignItems:"flex-end"}}>
+          <input ref={fR} type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf" style={{display:"none"}} onChange={e=>{if(e.target.files.length)hF(e.target.files);e.target.value=""}}/>
+          <button onClick={()=>fR.current?.click()} style={{fontFamily:F,fontSize:18,background:"transparent",border:"1px solid "+p.bd,borderRadius:8,color:p.td,padding:"8px 10px",cursor:"pointer",flexShrink:0,lineHeight:1,minHeight:42}}>📎</button>
+          <textarea style={{fontFamily:F,fontSize:14,flex:1,background:p.sa,border:"1px solid "+p.bd,borderRadius:8,color:p.tx,padding:"10px 12px",resize:"none",minHeight:42,maxHeight:120,outline:"none",lineHeight:1.5,opacity:over?.5:1}}
+            placeholder={over?"Budget reached":"⌘/Ctrl+Enter to send"} value={prompt} onChange={e=>setPr(e.target.value)} onKeyDown={onKey} rows={1} disabled={over}/>
+          <button style={{fontFamily:F,fontSize:13,fontWeight:700,background:over?p.er:p.ac,color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",cursor:running||!prompt.trim()||over?"not-allowed":"pointer",opacity:running||!prompt.trim()||over?.4:1,whiteSpace:"nowrap",minHeight:42}}
+            onClick={send} disabled={running||!prompt.trim()||over}>{running?"…":"Send ⏎"}</button>
+        </div>
+        <div style={{padding:"3px 20px 6px",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:9,color:p.tm,flexWrap:"wrap",gap:6}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontWeight:700,color:sC,fontSize:10}}>${sp.toFixed(2)}/${BDG}</span>
+            <span style={{color:p.cl,display:"flex",alignItems:"center",gap:3}}><span style={{width:12,height:12,borderRadius:"50%",background:p.cl,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff",fontFamily:F}}>C</span>${pcost.claude.toFixed(2)}</span>
+            <span style={{color:p.tm}}>+</span>
+            <span style={{color:p.oa,display:"flex",alignItems:"center",gap:3}}><span style={{width:12,height:12,borderRadius:"50%",background:p.oa,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff",fontFamily:F}}>G</span>${pcost.openai.toFixed(2)}</span>
+            {near&&!over&&<span style={{color:"#ffaa44"}}>⚠</span>}
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <span style={{color:p.cl,display:"flex",alignItems:"center",gap:3}}><span style={{width:12,height:12,borderRadius:"50%",background:p.cl,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff",fontFamily:F}}>C</span>★{wins.claude} ⚡{speedW.claude}</span>
+            <span style={{color:p.tm}}>vs</span>
+            <span style={{color:p.oa,display:"flex",alignItems:"center",gap:3}}><span style={{width:12,height:12,borderRadius:"50%",background:p.oa,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff",fontFamily:F}}>G</span>★{wins.openai} ⚡{speedW.openai}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+class ErrorBoundary extends React.Component{
+  constructor(props){super(props);this.state={err:null}}
+  static getDerivedStateFromError(err){return{err:err.message}}
+  render(){return this.state.err?React.createElement("div",{style:{padding:40,color:"#ff6b6b",fontFamily:F,fontSize:13}},"Error: "+this.state.err):this.props.children}
+}
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(ErrorBoundary,null,React.createElement(App)));
+</script>
+</body>
+</html>
